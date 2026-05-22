@@ -6,31 +6,58 @@ on:
 
 jobs:
   assign:
-    # 修正点1: 権限を明示的に指定
+    if: contains(github.event.issue.labels.*.name, 'role-assignment-trigger')
     permissions:
       issues: write
       contents: read
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    # (中略: Python設定とIssue解析)
-    
-    - name: Run script & Save result
-      # ... (スクリプト実行)
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
       run: |
-        echo "### 📊 役職自動割り当て結果" > comment_body.txt
-        python assign.py ... >> comment_body.txt
-        
-    - name: Create Comment
+        python -m pip install --upgrade pip
+        pip install pyyaml
+
+    - name: Parse Issue Body
+      uses: stefanbuck/github-issue-parser@v3
+      id: issue-parser
+      with:
+        template_path: .github/ISSUE_TEMPLATE/role_assign_form.yml
+
+    # データを安全に一時ファイルへ保存する（改行エラーの防止）
+    - name: Save inputs to temporary files
+      run: |
+        cat << 'EOF' > temp_roles.txt
+        ${{ steps.issue-parser.outputs.issueparser_roles_text }}
+        EOF
+        cat << 'EOF' > temp_prefs.txt
+        ${{ steps.issue-parser.outputs.issueparser_preferences_text }}
+        EOF
+
+    # 一時ファイルへのパスを渡してスクリプトを実行
+    - name: Run assignment script
+      env:
+        INPUT_MODE: ${{ steps.issue-parser.outputs.issueparser_mode }}
+      run: |
+        python assign.py --mode "$INPUT_MODE" --roles_file temp_roles.txt --prefs_file temp_prefs.txt > result.txt
+
+    # 割り振り結果をIssueのコメントに投稿する
+    - name: Create Comment with Results
       uses: peter-evans/create-or-update-comment@v4
       with:
         issue-number: ${{ github.event.issue.number }}
-        body-file: comment_body.txt # 修正点2: ファイルからコメントを読み込む
+        body-file: result.txt
 
-    # 修正点3: コメント作成後にクローズする（順序の確実化）
+    # 最後にIssueを自動でクローズする
     - name: Close Issue
       if: always()
-      run: gh issue close ${{ github.event.issue.number }} --comment "完了"
+      run: gh issue close ${{ github.event.issue.number }} --comment "割り当て処理が正常に完了しました。"
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
