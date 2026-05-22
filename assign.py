@@ -7,9 +7,21 @@ import itertools
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Role Assigner CLI")
     parser.add_argument('--mode', type=str, required=True, help='Assignment mode')
-    parser.add_argument('--roles', type=str, required=True, help='Roles YAML string')
-    parser.add_argument('--prefs', type=str, required=True, help='Preferences YAML string')
+    parser.add_argument('--roles_file', type=str, required=True, help='Path to roles text file')
+    parser.add_argument('--prefs_file', type=str, required=True, help='Path to preferences text file')
     return parser.parse_args()
+
+def load_yaml_from_file(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            # 空白だけ、または中身が正常に取得できなかった場合のバリデーション
+            if not content or content == "None":
+                return {}
+            return yaml.safe_load(content) or {}
+    except Exception as e:
+        print(f"ファイルの読み込みに失敗しました ({file_path}): {e}")
+        return {}
 
 def solve_satisfaction_first(preferences, role_counts):
     assignments = {member: None for member in preferences.keys()}
@@ -59,7 +71,9 @@ def solve_fairness_first(preferences, role_counts):
         flat_roles.extend([role] * count)
         
     if len(members) != len(flat_roles):
-        print("【注意】人数と総定員が一致しないため、第1希望最優先モードで代用します。")
+        print("### ⚠️ 【注意】メンバー数と総定員数が一致していません。")
+        print(f"入力された人数: {len(members)}人 / 総定員数: {len(flat_roles)}人")
+        print("そのため、一時的に『第1希望最優先モード』に切り替えて残枠の割り振りを実行します。\n")
         return solve_satisfaction_first(preferences, role_counts)
 
     best_patterns = []
@@ -112,32 +126,29 @@ def _assign_unfilled(assignments, remaining_roles):
 def main():
     args = parse_arguments()
     
-    try:
-        roles = yaml.safe_load(args.roles)
-        preferences = yaml.safe_load(args.prefs)
-    except yaml.YAMLError as e:
-        print(f"入力データの解析に失敗しました。形式を確認してください。\nError: {e}")
-        sys.exit(1)
+    roles = load_yaml_from_file(args.roles_file)
+    preferences = load_yaml_from_file(args.prefs_file)
 
-    total_slots = sum(roles.values()) if roles else 0
-    total_people = len(preferences) if preferences else 0
-    if total_slots != total_people:
-        print(f"【警告】総定員({total_slots}人)とメンバー数({total_people}人)が一致していません。\n")
+    if not roles or not preferences:
+        print("### ❌ エラー: 入力データの解析に失敗しました。")
+        print("フォームに入力されたデータのフォーマット（インデントやコロンの書き方）を確認してください。")
+        sys.exit(1)
 
     if args.mode == "fairness_first":
         results = solve_fairness_first(preferences, roles)
     else:
         results = solve_satisfaction_first(preferences, roles)
 
-    print(f"=== 役職割り当て結果 ({'ワースト回避モード' if args.mode == 'fairness_first' else '第1希望最優先モード'}) ===")
-    print(f"{'名前':<10} | {'割り当て役職':<15}")
-    print("-" * 35)
+    # 結果のマークダウン形式出力
+    print(f"### 📊 役職割り当て結果 ({'ワースト回避モード' if args.mode == 'fairness_first' else '第1希望最優先モード'})\n")
+    print("| 名前 | 割り当て役職 |")
+    print("| :--- | :--- |")
     for name, (role, rank, is_out_of_bounds) in results.items():
         if is_out_of_bounds:
-            display_role = f"{role} (希望外分配)"
+            display_role = f"**{role}** (希望外分配)"
         else:
-            display_role = f"{role} ({rank}希望)"
-        print(f"{name:<10} | {display_role:<15}")
+            display_role = f"**{role}** ({rank}希望)"
+        print(f"| {name} | {display_role} |")
 
 if __name__ == "__main__":
     main()
