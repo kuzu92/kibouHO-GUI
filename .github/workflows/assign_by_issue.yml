@@ -25,30 +25,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyyaml
 
-    - name: Parse Issue Body
-      uses: stefanbuck/github-issue-parser@v3
-      id: issue-parser
-      with:
-        template_path: .github/ISSUE_TEMPLATE/role_assign_form.yml
-
-    # データを安全に一時ファイルへ保存する（改行エラーの防止）
-    - name: Save inputs to temporary files
-      run: |
-        cat << 'EOF' > temp_roles.txt
-        ${{ steps.issue-parser.outputs.issueparser_roles_text }}
-        EOF
-        cat << 'EOF' > temp_prefs.txt
-        ${{ steps.issue-parser.outputs.issueparser_preferences_text }}
-        EOF
-
-    # 一時ファイルへのパスを渡してスクリプトを実行
-    - name: Run assignment script
+    # 送信されたIssueの本文全体をそのままテキストファイルに保存
+    - name: Save raw issue body
       env:
-        INPUT_MODE: ${{ steps.issue-parser.outputs.issueparser_mode }}
+        RAW_BODY: ${{ github.event.issue.body }}
       run: |
-        python assign.py --mode "$INPUT_MODE" --roles_file temp_roles.txt --prefs_file temp_prefs.txt > result.txt
+        echo "$RAW_BODY" > raw_issue.txt
 
-    # 割り振り結果をIssueのコメントに投稿する
+    # Pythonスクリプトを起動。生ファイルをそのまま渡す
+    - name: Run assignment script
+      run: |
+        python assign.py --issue_file raw_issue.txt > result.txt
+
+    # 結果をIssueのコメントに投稿する
     - name: Create Comment with Results
       uses: peter-evans/create-or-update-comment@v4
       with:
