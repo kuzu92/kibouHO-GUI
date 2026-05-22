@@ -17,8 +17,8 @@ body:
     id: roles_text
     attributes:
       label: "2. 各役職の定員"
-      description: "「役職名: 定員」の形式で1行ずつ入力してください。"
-      placeholder: |
+      description: "設定されている定員を必要に応じて書き換えてください。"
+      value: |
         HO1: 1
         HO2: 1
         HO3: 1
@@ -30,8 +30,8 @@ body:
     id: preferences_text
     attributes:
       label: "3. メンバーの希望順位"
-      description: "メンバーごとの希望順位を入力してください。"
-      placeholder: |
+      description: "メンバー名や希望順位を必要に応じて編集・追加してください。"
+      value: |
         Member1: {HO1: 2, HO2: 2, HO3: 1, HO4: 1}
         Member2: {HO1: 1, HO2: 3, HO3: 3, HO4: 2}
         Member3: {HO1: 2, HO2: 1, HO3: 3, HO4: 1}
