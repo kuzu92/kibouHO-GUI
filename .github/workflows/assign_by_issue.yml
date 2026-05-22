@@ -6,7 +6,8 @@ on:
 
 jobs:
   assign:
-    if: contains(github.event.issue.labels.*.name, 'role-assignment-trigger')
+    # 💡 スキップの原因になっていた「if: contains(...)」の条件行を完全に削除しました。
+    # これにより、このフォームから送られたIssueは100%確実に即座に処理が実行されます。
     permissions:
       issues: write
       contents: read
@@ -14,12 +15,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
-    - name: Comment Start Message
-      uses: peter-evans/create-or-update-comment@v4
-      with:
-        issue-number: ${{ github.event.issue.number }}
-        body: "⏳ ただいま自動割り当ての計算を開始しました。結果が出るまで約10秒ほどこのままお待ちください..."
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -37,14 +32,12 @@ jobs:
       run: |
         echo "$RAW_BODY" > raw_issue.txt
 
-    # ✨ 修正点1: エラーが発生（終了コード1）しても途中で強制終了せず、処理を次に進める設定 (continue-on-error)
     - name: Run assignment script
       id: run_script
       continue-on-error: true
       run: |
         python assign.py --issue_file raw_issue.txt > result.txt
 
-    # ✨ 修正点2: 計算成功・失敗に関わらず(if: always)、必ず作成された result.txt の中身をコメントする
     - name: Create Comment with Results
       if: always()
       uses: peter-evans/create-or-update-comment@v4
@@ -52,7 +45,6 @@ jobs:
         issue-number: ${{ github.event.issue.number }}
         body-file: result.txt
 
-    # ✨ 修正点3: プログラムの成否に合わせて、最後に投稿するクローズ時のコメント文を動的に切り替える
     - name: Close Issue
       if: always()
       run: |
