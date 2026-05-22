@@ -6,7 +6,6 @@ on:
 
 jobs:
   assign:
-    # 修正点：競合の原因になっていた「if: contains(...)」のスキップ判定条件を削除しました
     permissions:
       issues: write
       contents: read
@@ -15,6 +14,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # ✨ 【追加】送信直後に「処理開始」のコメントを即座に投稿する
+    - name: Comment Start Message
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.issue.number }}
+        body: "⏳ ただいま自動割り当ての計算を開始しました。結果が出るまで約10秒ほどこのままお待ちください..."
+
+    # ーーー 以下はこれまでの処理 ーーー
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -25,26 +32,22 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyyaml
 
-    # 送信されたIssueの本文全体をそのままテキストファイルに保存
     - name: Save raw issue body
       env:
         RAW_BODY: ${{ github.event.issue.body }}
       run: |
         echo "$RAW_BODY" > raw_issue.txt
 
-    # Pythonスクリプトを起動
     - name: Run assignment script
       run: |
         python assign.py --issue_file raw_issue.txt > result.txt
 
-    # 結果をIssueのコメントに投稿する
     - name: Create Comment with Results
       uses: peter-evans/create-or-update-comment@v4
       with:
         issue-number: ${{ github.event.issue.number }}
         body-file: result.txt
 
-    # 最後にIssueを自動でクローズする
     - name: Close Issue
       if: always()
       run: gh issue close ${{ github.event.issue.number }} --comment "割り当て処理が正常に完了しました。"
