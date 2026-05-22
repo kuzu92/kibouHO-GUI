@@ -1,0 +1,40 @@
+name: "🎭 役職自動割り当て (GUIフォーム)"
+description: "役職の定員と希望順位をフォームに入力して、自動割り振りを実行します。"
+title: "[実行] 役職割り当て申請"
+labels: ["role-assignment-trigger"]
+body:
+  - type: dropdown
+    id: mode
+    attributes:
+      label: "1. 割り当てモードを選択してください"
+      options:
+        - fairness_first
+        - satisfaction_first
+    validations:
+      required: true
+
+  - type: textarea
+    id: roles_text
+    attributes:
+      label: "2. 各役職の定員"
+      description: "「役職名: 定員」の形式で1行ずつ入力してください。"
+      placeholder: |
+        HO1: 1
+        HO2: 1
+        HO3: 1
+        HO4: 1
+    validations:
+      required: true
+
+  - type: textarea
+    id: preferences_text
+    attributes:
+      label: "3. メンバーの希望順位"
+      description: "メンバーごとの希望順位を入力してください。"
+      placeholder: |
+        Member1: {HO1: 2, HO2: 2, HO3: 1, HO4: 1}
+        Member2: {HO1: 1, HO2: 3, HO3: 3, HO4: 2}
+        Member3: {HO1: 2, HO2: 1, HO3: 3, HO4: 1}
+        Member4: {HO1: 2, HO2: 1, HO3: 1, HO4: 3}
+    validations:
+      required: true
