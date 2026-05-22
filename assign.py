@@ -3,25 +3,41 @@ import random
 import yaml
 import argparse
 import itertools
+import re
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Role Assigner CLI")
-    parser.add_argument('--mode', type=str, required=True, help='Assignment mode')
-    parser.add_argument('--roles_file', type=str, required=True, help='Path to roles text file')
-    parser.add_argument('--prefs_file', type=str, required=True, help='Path to preferences text file')
+    parser.add_argument('--issue_file', type=str, required=True, help='Path to raw issue body file')
     return parser.parse_args()
 
-def load_yaml_from_file(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            # 空白だけ、または中身が正常に取得できなかった場合のバリデーション
-            if not content or content == "None":
-                return {}
-            return yaml.safe_load(content) or {}
-    except Exception as e:
-        print(f"ファイルの読み込みに失敗しました ({file_path}): {e}")
-        return {}
+def parse_github_issue(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # Markdownの各見出し項目を切り出す
+    mode = "fairness_first"
+    if "satisfaction_first" in content and "fairness_first" not in content.split("satisfaction_first")[0]:
+        # ドロップダウンの選択位置を大まかに判定
+        if content.find("satisfaction_first") < content.find("fairness_first") or content.find("fairness_first") == -1:
+            mode = "satisfaction_first"
+
+    # 各テキストエリアを抽出（ ### 見出し の間のテキストを取得 ）
+    sections = re.split(r'### \d+\.', content)
+    
+    roles_raw = ""
+    prefs_raw = ""
+    
+    for section in sections:
+        if "各役職の定員" in section:
+            roles_raw = section.split("各役職の定員")[-1].strip()
+        elif "メンバーの希望順位" in section:
+            prefs_raw = section.split("メンバーの希望順位")[-1].strip()
+
+    # YAML部分だけをパースするために整形
+    roles = yaml.safe_load(roles_raw) if roles_raw else {}
+    preferences = yaml.safe_load(prefs_raw) if prefs_raw else {}
+    
+    return mode, roles, preferences
 
 def solve_satisfaction_first(preferences, role_counts):
     assignments = {member: None for member in preferences.keys()}
@@ -125,22 +141,20 @@ def _assign_unfilled(assignments, remaining_roles):
 
 def main():
     args = parse_arguments()
-    
-    roles = load_yaml_from_file(args.roles_file)
-    preferences = load_yaml_from_file(args.prefs_file)
+    mode, roles, preferences = parse_github_issue(args.issue_file)
 
     if not roles or not preferences:
         print("### ❌ エラー: 入力データの解析に失敗しました。")
         print("フォームに入力されたデータのフォーマット（インデントやコロンの書き方）を確認してください。")
         sys.exit(1)
 
-    if args.mode == "fairness_first":
+    if mode == "fairness_first":
         results = solve_fairness_first(preferences, roles)
     else:
         results = solve_satisfaction_first(preferences, roles)
 
     # 結果のマークダウン形式出力
-    print(f"### 📊 役職割り当て結果 ({'ワースト回避モード' if args.mode == 'fairness_first' else '第1希望最優先モード'})\n")
+    print(f"### 📊 役職割り当て結果 ({'ワースト回避モード' if mode == 'fairness_first' else '第1希望最優先モード'})\n")
     print("| 名前 | 割り当て役職 |")
     print("| :--- | :--- |")
     for name, (role, rank, is_out_of_bounds) in results.items():
