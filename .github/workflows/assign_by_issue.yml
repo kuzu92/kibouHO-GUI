@@ -6,8 +6,6 @@ on:
 
 jobs:
   assign:
-    # 💡 スキップの原因になっていた「if: contains(...)」の条件行を完全に削除しました。
-    # これにより、このフォームから送られたIssueは100%確実に即座に処理が実行されます。
     permissions:
       issues: write
       contents: read
@@ -15,6 +13,13 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+
+    # ✨ 【復活】サーバー起動後、Issueのコメント欄に「処理開始」を即座に自動投稿します
+    - name: Comment Start Message
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.issue.number }}
+        body: "⏳ システムがIssueを検知しました。ただいま自動割り当ての計算を開始しています。完了まであと数秒ほどこのままお待ちください..."
 
     - name: Set up Python
       uses: actions/setup-python@v5
