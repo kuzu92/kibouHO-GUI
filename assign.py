@@ -14,14 +14,11 @@ def parse_github_issue(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Markdownの各見出し項目を切り出す
     mode = "fairness_first"
-    if "satisfaction_first" in content and "fairness_first" not in content.split("satisfaction_first")[0]:
-        # ドロップダウンの選択位置を大まかに判定
+    if "satisfaction_first" in content and "fairness_first" not in content.split("satisfaction_first"):
         if content.find("satisfaction_first") < content.find("fairness_first") or content.find("fairness_first") == -1:
             mode = "satisfaction_first"
 
-    # 各テキストエリアを抽出（ ### 見出し の間のテキストを取得 ）
     sections = re.split(r'### \d+\.', content)
     
     roles_raw = ""
@@ -33,9 +30,29 @@ def parse_github_issue(file_path):
         elif "メンバーの希望順位" in section:
             prefs_raw = section.split("メンバーの希望順位")[-1].strip()
 
-    # YAML部分だけをパースするために整形
-    roles = yaml.safe_load(roles_raw) if roles_raw else {}
-    preferences = yaml.safe_load(prefs_raw) if prefs_raw else {}
+    # --- エラーハンドリング1: 入力フォーマット（YAML形式）のチェック ---
+    try:
+        roles = yaml.safe_load(roles_raw) if roles_raw else {}
+        if roles is None: roles = {}
+    except yaml.YAMLError as e:
+        print("### ❌ エラー: 【2. 各役職の定員】の入力形式が正しくありません")
+        print("以下を確認して、もう一度新しいIssueからやり直してください。")
+        print("- 全角のコロン（`：`）や全角スペースが混ざっていませんか？")
+        print("- 項目ごとに正しく改行されていますか？")
+        print(f"\n> 詳しいエラー内容: `{e}`")
+        sys.exit(1)
+
+    try:
+        preferences = yaml.safe_load(prefs_raw) if prefs_raw else {}
+        if preferences is None: preferences = {}
+    except yaml.YAMLError as e:
+        print("### ❌ エラー: 【3. メンバーの希望順位】の入力形式が正しくありません")
+        print("以下を確認して、もう一度新しいIssueからやり直してください。")
+        print("- 全角のコロン（`：`）、全角スペース、全角カッコ（`｛｝`）が混ざっていませんか？")
+        print("- メンバー名や役職名、数値の間に半角コロンと半角スペース ` : ` がありますか？")
+        print("- カッコの閉じ忘れはありませんか？")
+        print(f"\n> 詳しいエラー内容: `{e}`")
+        sys.exit(1)
     
     return mode, roles, preferences
 
@@ -86,12 +103,6 @@ def solve_fairness_first(preferences, role_counts):
     for role, count in role_counts.items():
         flat_roles.extend([role] * count)
         
-    if len(members) != len(flat_roles):
-        print("### ⚠️ 【注意】メンバー数と総定員数が一致していません。")
-        print(f"入力された人数: {len(members)}人 / 総定員数: {len(flat_roles)}人")
-        print("そのため、一時的に『第1希望最優先モード』に切り替えて残枠の割り振りを実行します。\n")
-        return solve_satisfaction_first(preferences, role_counts)
-
     best_patterns = []
     min_max_penalty = float('inf')
     min_total_penalty = float('inf')
@@ -143,17 +154,36 @@ def main():
     args = parse_arguments()
     mode, roles, preferences = parse_github_issue(args.issue_file)
 
+    # --- エラーハンドリング2: 未入力のチェック ---
     if not roles or not preferences:
-        print("### ❌ エラー: 入力データの解析に失敗しました。")
-        print("フォームに入力されたデータのフォーマット（インデントやコロンの書き方）を確認してください。")
+        print("### ❌ エラー: データの読み込みに失敗しました")
+        print("入力フォームが空欄になっているか、形式が間違っています。")
+        print("最初から表示されている初期サンプルデータの書き方を参考に、もう一度新しくIssueを作成し直してください。")
+        sys.exit(1)
+
+    total_slots = sum(roles.values())
+    total_people = len(preferences)
+
+    # --- エラーハンドリング3: 人数と定員の不一致チェック（ワースト回避モード時のみ必須） ---
+    if mode == "fairness_first" and total_slots != total_people:
+        print("### ❌ エラー: 総定員数とメンバーの人数が一致していません")
+        print(f"現在、**総定員数は {total_slots}人**、**メンバー数は {total_people}人** として入力されています。")
+        print("\n【ワースト回避モード】を正確に実行するには、全員にいずれかの役職を過不足なく割り当てる必要があるため、**総定員数と人数を完全に一致させる必要があります。**")
+        print("以下、いずれかの方法で修正し、もう一度新しくIssueを作成し直してください。")
+        print("1. 役職の定員の数値を調整して、合計人数と合わせる")
+        print("2. メンバーの行を追加・削除して、総定員数と合わせる")
+        print("3. または、人数がズレていても動作する **【第1希望最優先モード（satisfaction_first）】** を選んで実行する")
         sys.exit(1)
 
     if mode == "fairness_first":
         results = solve_fairness_first(preferences, roles)
     else:
+        if total_slots != total_people:
+            print("### ⚠️ 【確認】メンバー数と総定員数が一致していません。")
+            print(f"入力された人数: {total_people}人 / 総定員数: {total_slots}人")
+            print("『第1希望最優先モード』として、可能な範囲で自動割り振りと希望外分配を実行します。\n")
         results = solve_satisfaction_first(preferences, roles)
 
-    # 結果のマークダウン形式出力
     print(f"### 📊 役職割り当て結果 ({'ワースト回避モード' if mode == 'fairness_first' else '第1希望最優先モード'})\n")
     print("| 名前 | 割り当て役職 |")
     print("| :--- | :--- |")
