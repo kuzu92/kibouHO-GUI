@@ -6,7 +6,7 @@ on:
 
 jobs:
   assign:
-    if: contains(github.event.issue.labels.*.name, 'role-assignment-trigger')
+    # 修正点：競合の原因になっていた「if: contains(...)」のスキップ判定条件を削除しました
     permissions:
       issues: write
       contents: read
@@ -32,7 +32,7 @@ jobs:
       run: |
         echo "$RAW_BODY" > raw_issue.txt
 
-    # Pythonスクリプトを起動。生ファイルをそのまま渡す
+    # Pythonスクリプトを起動
     - name: Run assignment script
       run: |
         python assign.py --issue_file raw_issue.txt > result.txt
